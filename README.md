@@ -1,94 +1,149 @@
-# 🤖 Real-Time Voice AI Orchestrator
+# 🎙️ Real-Time Voice Agent with RAG
 
-This project is a production-ready, end-to-end real-time voice agent. It integrates LiveKit for WebRTC, Deepgram for STT/TTS, and Gemini for LLM and RAG (Retrieval-Augmented Generation).
-
-## 🚀 Features
-
-- **Real-Time Voice Interaction**: Low-latency audio streaming via WebRTC (LiveKit).
-- **Intelligent RAG**: Upload `.txt` files to provide the agent with custom knowledge.
-- **Adaptive STT**: Uses Deepgram Nova-2 with custom buffering to handle network jitter.
-- **Seamless Interruption**: The agent stops speaking immediately when the user interrupts.
-- **Live Diagnostics**:
-    - **Partial Transcripts**: See your words in real-time as you speak.
-    - **RAG Sources Panel**: View the exact document snippets the agent retrieved to answer your query.
-- **Modular Architecture**: Clean separation between STT, LLM, TTS, and Vector services.
+A high-performance, WebRTC-powered voice assistant featuring **LiveKit**, **Gemini 2.0 Flash**, and **Deepgram**. This platform allows for natural voice conversations with a custom Knowledge Base using RAG (Retrieval-Augmented Generation).
 
 ---
 
-## 🛠️ Setup Instructions
+## 🚀 Quick Start
 
 ### 1. Prerequisites
-- **Node.js** (v18 or higher)
-- **LiveKit Cloud account** (or a local LiveKit server instance)
-- **Deepgram API Key**
-- **Google Gemini API Key**
+- **Node.js**: v18 or later
+- Accounts: 
+  - [LiveKit Cloud](https://cloud.livekit.io/) (or local server)
+  - [Google AI Studio](https://aistudio.google.com/) (for LLM & Embeddings)
+  - [Deepgram](https://console.deepgram.com/) (for STT/TTS)
 
-### 2. Installation
-Clone the repository and install dependencies:
+### 2. Setup Environment
+Navigate to the `backend/` directory and create a `.env` file:
+```bash
+# LiveKit Configuration
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+
+# AI Services
+GEMINI_API_KEY=your_gemini_key
+DEEPGRAM_API_KEY=your_deepgram_key
+```
+
+### 3. Installation & Execution
+
+#### **Backend**
 ```bash
 cd backend
 npm install
-```
-
-### 3. Environment Variables
-Create a `.env` file in the `backend/` directory and populate it with your keys:
-```env
-LIVEKIT_URL=wss://your-livekit-url.livekit.cloud
-LIVEKIT_API_KEY=your_livekit_api_key
-LIVEKIT_API_SECRET=your_livekit_api_secret
-
-GEMINI_API_KEY=your_gemini_api_key
-DEEPGRAM_API_KEY=your_deepgram_api_key
-```
-
----
-
-## 🏃 Running the Project
-
-### Start the Backend
-From the `backend/` directory:
-```bash
 node server.js
 ```
-The server will start at `http://localhost:3000`.
+*Backend runs on `http://localhost:3000`*
 
-### Start the Frontend
-The frontend is served statically by the backend via Express. You can simply open `http://localhost:3000` in your browser.
-*(Alternatively, you can run a separate dev server like `npx serve public`, but ensure it communicates with the correct backend port).*
+#### **Frontend**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+*Frontend runs on `http://localhost:5173`*
 
 ---
 
-## 📡 LiveKit Configuration
+## 🛠️ Infrastructure: LiveKit
 
 ### Cloud Setup (Recommended)
-1. Create a project at [LiveKit Cloud](https://cloud.livekit.io/).
-2. Copy your **Server URL**, **API Key**, and **API Secret** into the `.env` file.
-3. Ensure the `index.html` file (line 274) uses your project's `wss://` URL.
+1. Sign up at [LiveKit Cloud](https://cloud.livekit.io/).
+2. Create a new project.
+3. Copy the **Project URL**, **API Key**, and **API Secret** into your backend `.env`.
+4. Update the `LIVEKIT_URL` in `frontend/src/hooks/useVoiceAgent.js`.
 
-### Local Setup
-If running LiveKit locally:
-1. Follow the [LiveKit Local Setup Guide](https://docs.livekit.io/realtime/self-hosting/local-setup/).
-2. Update the `LIVEKIT_URL` in `.env` to `ws://localhost:7800`.
-3. Update `index.html` to connect to `ws://localhost:7800`.
+
 
 ---
 
-## 📚 How to Use (Demo Flow)
-1. **Connect**: Open the dashboard and click **Start Call**.
-2. **Ingest Knowledge**: 
-   - Choose a `.txt` file containing specific information.
-   - Click **Ingest Document**. Wait for the "✅ Indexed" status.
-3. **Ask a Question**: Ask the agent something specific present in your document.
-4. **Observe RAG**:
-   - The "Knowledge Retrieval" panel will show the retrieved sources.
-   - The agent will answer based on the document.
-5. **Interrupt**: Try talking while the agent is speaking; it should stop immediately to listen to you.
+## 🏗️ System Architecture
+
+```mermaid
+graph TD
+    User((User))
+    
+    subgraph Frontend
+        React[React Dashboard]
+        LK_Client[LiveKit Client]
+        Visualizer[Audio Visualizer]
+    end
+    
+    subgraph Backend
+        WS[WebSocket Server]
+        LK_Server[LiveKit SDK]
+        Agent[Voice Agent Logic]
+        Vector[Vector Service / RAG]
+    end
+    
+    subgraph AI_Services
+        Deepgram_STT[Deepgram STT]
+        Gemini[Gemini 2.5 Flash]
+        Deepgram_TTS[Deepgram TTS]
+    end
+
+    User <--> LK_Client
+    React <--> WS
+    WS <--> Agent
+    Agent <--> Deepgram_STT
+    Agent <--> Gemini
+    Agent <--> Deepgram_TTS
+    Agent <--> Vector
+    LK_Client <--> LK_Server
+```
 
 ---
 
-## ⚠️ Known Limitations & Tradeoffs
+## 🖥️ UI Dashboard Guide
 
-- **Memory-Based Vector Store**: For this demo, the vector store is in-memory. Restarting the server will clear the indexed documents. In production, this should be replaced with a persistent store like Pinecone or Chroma.
-- **Audio Sample Rates**: The system uses the browser's native sample rate (typically 44.1kHz or 48kHz) and downsamples/configures the pipeline accordingly. Some hardware might experience jitter if the network is unstable.
-- **Single Room Demo**: The current implementation is hardcoded for a `demo-room`. For multi-tenant use, dynamically generate room names via the UI.
-- **Sentence-Based TTS**: The backend buffers text into sentences before sending them to TTS to ensure natural prosody. This adds a slight (200-500ms) latency between LLM generation and voice output.
+The interface is divided into a high-productivity dashboard layout:
+
+### 1. Left Sidebar
+- **Knowledge Base**: Real-time document ingestion. Upload `.txt` or `.md` files to immediately expand the agent's context.
+- **System Logs**: A live terminal-style feed of background events (WebSocket status, STT events, connectivity logs).
+
+### 2. Dashboard Header
+- **Status Indicator**: Shows if the system is "Online" or "Idle".
+- **Mic Control**: Toggle your microphone on/off during an active session.
+- **Terminate Session**: Gracefully close WebRTC and WebSocket connections.
+
+### 3. Control Panel
+- **Voice Frequency Visualizer**: Real-time indigo gradient bars reflecting the agent's speech intensity.
+- **Agent Persona Editor**: Customize the AI's personality and instructions on the fly.
+
+### 4. Main Interaction Area
+- **Live Conversation**: A fixed-height, auto-scrolling transcript area showing real-time text of the conversation.
+- **Retrieved Context (RAG)**: A dynamic horizontal panel that appears at the bottom only when the agent pulls information from your uploaded Knowledge Base.
+
+## 🧠 Key Features
+
+| Feature | Implementation | Performance |
+| :--- | :--- | :--- |
+| **Connectivity** | WebRTC (LiveKit) | Sub-100ms latency |
+| **Transcription** | Deepgram Nova-2 | Industry-leading accuracy |
+| **Brain** | Gemini 2.5 Flash | Ultra-fast reasoning & context |
+| **Voice** | Deepgram Aura | Human-like natural prosody |
+| **RAG** | VectorService (Local) | gemini-embedding-001 |
+
+---
+
+## 📖 Usage Guide
+
+1. **Upload Documents**: Use the "Knowledge Base" panel to upload `.txt` or `.md` files. They are indexed in real-time.
+2. **Configure Persona**: Update the "Agent Persona" text area to change how the agent behaves (e.g., "Act as a helpful doctor").
+3. **Start Session**: Click **Start Voice Session**. The app handles WebRTC handshakes and microphone permissions.
+4. **Interact**: Speak naturally. The "Retrieved Context" will pop up automatically if the agent uses your uploaded documents to answer.
+
+---
+
+## ⚠️ Limitations & Tradeoffs
+
+- **Local Vector Store**: The current RAG implementation uses an in-memory vector store. Documents are cleared when the backend restarts. For production, consider using Pinecone or Weaviate.
+- **Single Room Focus**: The demo assumes a shared `demo-room`. In a multi-user production environment, unique room names based on session IDs should be generated.
+- **In-Memory History**: Conversation memory is stored per-session in the backend. 
+- **Audio Worklet Context**: Users must perform a user gesture (click "Start") before the browser allows audio capture, which is handled in the UI.
+
+---
+
+

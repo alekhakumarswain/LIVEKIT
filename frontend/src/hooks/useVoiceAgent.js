@@ -12,6 +12,8 @@ export const useVoiceAgent = () => {
     const [ragSources, setRagSources] = useState([]);
     const [status, setStatus] = useState('disconnected'); // disconnected, connecting, connected
     const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
+    const [logs, setLogs] = useState([]);
+    const [isMuted, setIsMuted] = useState(false);
 
     const roomRef = useRef(null);
     const wsRef = useRef(null);
@@ -19,6 +21,12 @@ export const useVoiceAgent = () => {
     const audioQueueRef = useRef([]);
     const isPlayingRef = useRef(false);
     const currentSourceRef = useRef(null);
+
+    const addLog = useCallback((msg, source = "System", type = "info") => {
+        const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLogs(prev => [...prev, { time, source, msg, type }].slice(-50)); // Keep last 50 logs
+        console.log(`[${time}] ${source}: ${msg}`);
+    }, []);
 
     const cleanup = useCallback(() => {
         if (roomRef.current) roomRef.current.disconnect();
@@ -28,11 +36,13 @@ export const useVoiceAgent = () => {
         setIsConnected(false);
         setStatus('disconnected');
         setIsAgentSpeaking(false);
+        setIsMuted(false);
         setPartialTranscript('');
         setRagSources([]);
         audioQueueRef.current = [];
         isPlayingRef.current = false;
-    }, []);
+        addLog("Session cleanup complete", "System");
+    }, [addLog]);
 
     const playNextAudio = async () => {
         if (audioQueueRef.current.length === 0) {
@@ -60,7 +70,7 @@ export const useVoiceAgent = () => {
             source.start(0);
             currentSourceRef.current = source;
         } catch (e) {
-            console.error("Audio Playback Error:", e);
+            addLog(`Audio Playback Error: ${e.message}`, "Audio", "error");
             playNextAudio();
         }
     };
@@ -71,7 +81,7 @@ export const useVoiceAgent = () => {
         wsRef.current = ws;
 
         ws.onopen = () => {
-            console.log("Connected to Backend WS");
+            addLog("Connected to Backend Socket", "WS");
             ws.send(JSON.stringify({ type: "update_prompt", prompt: initialPrompt }));
             startAudioCapture(mediaStreamTrack, language);
         };
@@ -84,6 +94,7 @@ export const useVoiceAgent = () => {
                 const data = JSON.parse(event.data);
 
                 if (data.type === "interrupt") {
+                    addLog("Interrupted by user", "Agent");
                     audioQueueRef.current = [];
                     if (currentSourceRef.current) {
                         currentSourceRef.current.stop();
@@ -98,19 +109,26 @@ export const useVoiceAgent = () => {
                     if (data.isFinal) {
                         setPartialTranscript('');
                         setMessages(prev => [...prev, { role: 'user', text: data.text, timestamp: new Date() }]);
+                        addLog(`User: ${data.text}`, "STT");
                     } else {
                         setPartialTranscript(data.text);
                     }
                 } else if (data.type === "agent_text") {
                     setMessages(prev => [...prev, { role: 'agent', text: data.text, timestamp: new Date() }]);
+                    addLog(`Agent: ${data.text}`, "LLM");
                 } else if (data.type === "rag_sources") {
                     setRagSources(data.sources);
+                    addLog(`Retrieved ${data.sources.length} sources`, "RAG");
                 }
             }
         };
 
+        ws.onerror = (err) => {
+            addLog("WebSocket Error", "WS", "error");
+        };
+
         ws.onclose = () => {
-            console.log("Disconnected from Backend WS");
+            addLog("Socket Connection Closed", "WS");
             cleanup();
         };
     };
@@ -120,6 +138,8 @@ export const useVoiceAgent = () => {
             const audioContext = new AudioContext();
             audioContextRef.current = audioContext;
             await audioContext.resume();
+
+            addLog(`Mic sample rate: ${audioContext.sampleRate}Hz`, "Audio");
 
             wsRef.current.send(JSON.stringify({
                 type: "config",
@@ -151,14 +171,16 @@ export const useVoiceAgent = () => {
                     audioBuffer = [];
                 }
             };
+            addLog("Audio capture pipeline active", "Audio");
         } catch (err) {
-            console.error("Audio Pipeline Error:", err);
+            addLog(`Audio Pipeline Error: ${err.message}`, "Audio", "error");
             setStatus('error');
         }
     };
 
     const startCall = async (initialPrompt, language) => {
         setStatus('connecting');
+        addLog("Initializing LiveKit connection...", "System");
         try {
             const identity = `user-${Math.floor(Math.random() * 1000)}`;
             const response = await fetch(`${BACKEND_URL}/getToken?identity=${identity}&roomName=demo-room`);
@@ -176,18 +198,29 @@ export const useVoiceAgent = () => {
                 setupWebSocket(track, initialPrompt, language);
                 setIsConnected(true);
                 setStatus('connected');
+                addLog("LiveKit Room connected", "System");
             } else {
                 throw new Error("Microphone track not found");
             }
         } catch (error) {
-            console.error("Connection Failed:", error);
+            addLog(`Connection Failed: ${error.message}`, "Error", "error");
             setStatus('error');
             cleanup();
         }
     };
 
     const stopCall = () => {
+        addLog("User requested session end", "System");
         cleanup();
+    };
+
+    const toggleMic = async () => {
+        if (roomRef.current && roomRef.current.localParticipant) {
+            const isEnabled = roomRef.current.localParticipant.isMicrophoneEnabled;
+            await roomRef.current.localParticipant.setMicrophoneEnabled(!isEnabled);
+            setIsMuted(isEnabled);
+            addLog(isEnabled ? "Microphone Muted" : "Microphone Unmuted", "Audio");
+        }
     };
 
     const updatePrompt = (prompt) => {
@@ -196,6 +229,7 @@ export const useVoiceAgent = () => {
                 type: "update_prompt",
                 prompt: prompt
             }));
+            addLog("System prompt updated", "Config");
         }
     };
 
@@ -206,8 +240,11 @@ export const useVoiceAgent = () => {
         partialTranscript,
         ragSources,
         isAgentSpeaking,
+        logs,
+        isMuted,
         startCall,
         stopCall,
+        toggleMic,
         updatePrompt
     };
 };
