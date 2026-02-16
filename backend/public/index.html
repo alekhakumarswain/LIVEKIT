@@ -109,9 +109,21 @@
     <!-- Agent Config -->
     <div class="card">
         <h2>🛠️ Agent Configuration</h2>
+
+        <div style="margin-bottom: 10px;">
+            <label>Language:</label>
+            <select id="languageSelector">
+                <option value="en-US">English (US)</option>
+                <option value="hi-IN">Hindi (India)</option>
+                <option value="es-ES">Spanish (Spain)</option>
+                <option value="fr-FR">French (France)</option>
+                <option value="de-DE">German (Germany)</option>
+            </select>
+        </div>
+
         <label>System Prompt:</label>
         <textarea
-            id="systemPrompt">You are a helpful voice assistant. Answer strictly based on the provided context if available. Keep answers concise.</textarea>
+            id="systemPrompt">You are a helpful voice assistant. Answer strictly based on the provided context if available. Keep answers concise. Respond in the same language as the user.</textarea>
         <button id="updatePromptBtn">Update Behavior</button>
     </div>
 
@@ -139,6 +151,7 @@
         const uploadInput = document.getElementById('kbUpload');
         const promptInput = document.getElementById('systemPrompt');
         const updatePromptBtn = document.getElementById('updatePromptBtn');
+        const languageSelector = document.getElementById('languageSelector');
 
         // State
         let room, ws, audioContext;
@@ -262,7 +275,8 @@
                 // Send Config to Backend
                 ws.send(JSON.stringify({
                     type: "config",
-                    sampleRate: audioContext.sampleRate
+                    sampleRate: audioContext.sampleRate,
+                    language: languageSelector.value
                 }));
 
                 await audioContext.audioWorklet.addModule('/processor.js');

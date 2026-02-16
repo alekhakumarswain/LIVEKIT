@@ -18,18 +18,29 @@ export class VectorService {
         console.log(`Processing ${chunks.length} chunks from ${filename}...`);
 
         for (const chunk of chunks) {
-            try {
-                const result = await embeddingModel.embedContent(chunk);
-                const embedding = result.embedding.values;
+            let success = false;
+            // Try different models as fallback (gemini-embedding-001 confirmed working)
+            const modelsToTry = ["gemini-embedding-001", "text-embedding-004", "embedding-001"];
 
-                this.documents.push({
-                    id: Date.now() + Math.random(),
-                    text: chunk,
-                    embedding: embedding,
-                    source: filename
-                });
-            } catch (err) {
-                console.error("Embedding error:", err);
+            for (const modelName of modelsToTry) {
+                if (success) break;
+                try {
+                    const model = genAI.getGenerativeModel({ model: modelName });
+                    const result = await model.embedContent(chunk);
+                    const embedding = result.embedding.values;
+
+                    this.documents.push({
+                        id: Date.now() + Math.random(),
+                        text: chunk,
+                        embedding: embedding,
+                        source: filename
+                    });
+                    success = true;
+                } catch (err) {
+                    if (modelName === modelsToTry[modelsToTry.length - 1]) {
+                        console.error(`❌ Embedding failed for all models:`, err.message);
+                    }
+                }
             }
         }
         console.log(`Added ${filename}. Total chunks: ${this.documents.length}`);
@@ -43,8 +54,21 @@ export class VectorService {
         }
 
         try {
-            const result = await embeddingModel.embedContent(query);
-            const queryEmbedding = result.embedding.values;
+            let queryEmbedding = null;
+            const modelsToTry = ["gemini-embedding-001", "text-embedding-004", "embedding-001"];
+
+            for (const modelName of modelsToTry) {
+                if (queryEmbedding) break;
+                try {
+                    const model = genAI.getGenerativeModel({ model: modelName });
+                    const result = await model.embedContent(query);
+                    queryEmbedding = result.embedding.values;
+                } catch (err) {
+                    if (modelName === modelsToTry[modelsToTry.length - 1]) throw err;
+                }
+            }
+
+            if (!queryEmbedding) return [];
 
             // Calculate Cosine Similarity
             const scoredDocs = this.documents.map(doc => ({

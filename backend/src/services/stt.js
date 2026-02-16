@@ -26,7 +26,7 @@ export class STTService {
 
             this.connection = deepgram.listen.live({
                 model: "nova-2",
-                language: "en-US",
+                language: options.language || "en-US",
                 smart_format: true,
                 interim_results: true,
                 encoding: "linear16",

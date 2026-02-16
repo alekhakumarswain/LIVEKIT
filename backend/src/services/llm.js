@@ -9,16 +9,18 @@ export class LLMService {
     constructor() {
         this.systemPrompt = `You are a helpful voice assistant for a technical evaluation. 
 Keep your answers brief, conversational, and under 2 sentences unless asked for more details.
+Always respond in the same language as the user's query.
 Do not use markdown formatting like bold or headers as this will be spoken.`;
     }
 
     /**
-     * Generates a response based on the user's query and retrieved context.
+     * Generates a response based on the user's query, history and retrieved context.
      * @param {string} query The user's question.
      * @param {string[]} contextChunks Array of relevant text chunks.
+     * @param {Object[]} history Array of { role: 'user'|'model', text: string }
      * @returns {AsyncGenerator<string>} Stream of text chunks.
      */
-    async *generateStream(query, contextChunks = []) {
+    async *generateStream(query, contextChunks = [], history = []) {
         let contextText = "";
         if (contextChunks.length > 0) {
             contextText = `
@@ -27,10 +29,14 @@ ${contextChunks.join("\n---\n")}
 `;
         }
 
-        const fullPrompt = `${this.systemPrompt}\n${contextText}\nUser: ${query}\nAssistant:`;
+        // Construct history string
+        const historyText = history.map(h => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n');
+
+        const fullPrompt = `${this.systemPrompt}\n${contextText}\n${historyText}\nUser: ${query}\nAssistant:`;
 
         console.log("🤖 LLM: Generating response for query:", query);
         console.log("🤖 LLM: Context used:", contextChunks.length > 0 ? "Yes" : "No");
+        console.log("🤖 LLM: History length:", history.length);
 
         try {
             const result = await model.generateContentStream(fullPrompt);
